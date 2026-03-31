@@ -24,7 +24,7 @@ def parse_filenames(j_value):
         return []
     return [fn.strip() for fn in str(j_value).split('\n') if fn.strip()]
 
-def load_download_tasks(excel_path, url_col_idx=6, name_col_idx=10):
+def load_download_tasks(excel_path, url_col_idx=6, name_col_idx=9):
     """Excelから (url, filename) ペアを重複排除して返す"""
     import openpyxl
     wb = openpyxl.load_workbook(str(excel_path), read_only=True, data_only=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """assign_filenames.py – F列のURLに通し番号ファイル名を割り当て、
-   J列に書き込み、G列・H列の [URL|テキスト] を [ファイル名|テキスト] に置換する。
+   I列に書き込み、G列・H列の [URL|テキスト] を [ファイル名|テキスト] に置換する。
    URLのドメイン/パスからプレフィックスを自動判別。
    マッチしないURLは DEFAULT グループに振り分け。
    出力は常に別ファイル名（_named 付き）に保存。
@@ -96,7 +96,7 @@ def generate_output_path(input_path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="F列URLに通し番号ファイル名を割り当て、G/H列を置換、J列に書き込み")
+        description="F列URLに通し番号ファイル名を割り当て、G/H列を置換、I列に書き込み")
     parser.add_argument("excel", type=Path, help="入力Excelファイル")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="出力Excelファイル（省略時は自動生成）")
@@ -114,8 +114,8 @@ def main():
                         help="URL列（デフォルト: F）")
     parser.add_argument("--evidence-cols", default="G,H",
                         help="証跡列（カンマ区切り、デフォルト: G,H）")
-    parser.add_argument("--name-col", default="J",
-                        help="ファイル名書き込み列（デフォルト: J）")
+    parser.add_argument("--name-col", default="I",
+                        help="ファイル名書き込み列（デフォルト: I）")
     parser.add_argument("--dry-run", action="store_true",
                         help="変更せず結果のみ表示")
     args = parser.parse_args()
@@ -202,7 +202,7 @@ def main():
         wb.close()
         return
 
-    # ── パス2: J列書き込み + G/H列置換 ──
+    # ── パス2: I列書き込み + G/H列置換 ──
     rows_modified = 0
     replacements_gh = 0
 
@@ -212,7 +212,7 @@ def main():
         if not urls:
             continue
 
-        # J列
+        # I列
         filenames_for_row = []
         for url in urls:
             norm = normalize_url(url)
@@ -241,7 +241,7 @@ def main():
     for px in sorted(prefix_counts.keys()):
         label = f"{px} (DEFAULT)" if px == default_prefix else f"{px}"
         print(f"      {label}: {prefix_counts[px]} 件")
-    print(f"    J列更新: {rows_modified} 行")
+    print(f"    I列更新: {rows_modified} 行")
     print(f"    G/H列置換: {replacements_gh} 箇所")
     print(f"    保存先: {output_path}")
     print()

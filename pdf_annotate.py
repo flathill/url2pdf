@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""pdf_annotate_v13.6 – 証跡PDFアノテーション
+"""pdf_annotate_v13.9 – 証跡PDFアノテーション
+   v13.6ベース + pymupdf 1.25+ 対応（border_color を xref_set_key で設定）
    全てFreeTextアノテーション（編集・移動可能）
    + clean_contents
    + 項番の重複排除（同一ページ内で同じ項番は1回だけ）
@@ -38,6 +39,42 @@ def parse_evidence(cell_value):
 def pdf_fingerprint(pdf_path):
     st = os.stat(pdf_path)
     return f"{st.st_mtime:.6f}_{st.st_size}"
+
+
+def set_annot_border_color(doc, annot, color_tuple, width=0.5):
+    """pymupdf 1.25+ 対応: update()後にAPストリーム内の枠線描画を書き換え"""
+    try:
+        xref = annot.xref
+        # アノテーション属性に色と枠線を設定
+        c_str = "[" + " ".join(f"{c:.4f}" for c in color_tuple) + "]"
+        doc.xref_set_key(xref, "C", c_str)
+        bs_str = f"<</W {width} /S /S>>"
+        doc.xref_set_key(xref, "BS", bs_str)
+        # APストリーム内に枠線描画を追加
+        ap_str = doc.xref_get_key(xref, "AP")
+        if ap_str[0] == "dict":
+            # /AP << /N xref >> の形式からNormalのxrefを取得
+            import re as _re
+            m = _re.search(r"(\d+) 0 R", ap_str[1])
+            if m:
+                ap_n_xref = int(m.group(1))
+                stream = doc.xref_stream(ap_n_xref)
+                if stream:
+                    # 矩形を取得してストロークコマンドを生成
+                    r = annot.rect
+                    w2 = width / 2
+                    stroke_cmd = (
+                        f"q {color_tuple[0]:.4f} {color_tuple[1]:.4f} {color_tuple[2]:.4f} RG "
+                        f"{width} w "
+                        f"{w2:.2f} {w2:.2f} {r.width - width:.2f} {r.height - width:.2f} re S Q\n"
+                    )
+                    if isinstance(stream, bytes):
+                        new_stream = stream + stroke_cmd.encode()
+                    else:
+                        new_stream = stream.encode() + stroke_cmd.encode()
+                    doc.xref_set_stream(ap_n_xref, new_stream)
+    except Exception:
+        pass
 
 
 # ── テキストインデックス ─────────────────────────────
@@ -183,7 +220,7 @@ def process_pdf(doc, page_annotations):
 
             first_q = quads[0]
             last_q = quads[-1]
-            first_r = first_q.rect if hasattr(first_q, 'rect') else pymupdf.Rect(first_q)
+            first_r = first_q.rect if hasattr(first_q, "rect") else pymupdf.Rect(first_q)
             last_r = last_q.rect if hasattr(last_q, 'rect') else pymupdf.Rect(last_q)
             hl_y0 = first_r.y0
             hl_x0 = first_r.x0
@@ -208,12 +245,13 @@ def process_pdf(doc, page_annotations):
                     label_rect,
                     item_no,
                     fontsize=LABEL_FS,
-                    fontname="helv",
+                    fontname="japan",
                     text_color=(1, 0, 0),
                     fill_color=(1, 1, 1),
                     align=0,
                 )
                 a.update()
+                set_annot_border_color(doc, a, (1, 0, 0), width=0.5)
                 occupied.append(pymupdf.Rect(label_rect))
                 drawn_labels_on_page.add(item_no)
 
@@ -241,12 +279,13 @@ def process_pdf(doc, page_annotations):
                     jp_rect,
                     jp_text,
                     fontsize=JP_FS,
-                    fontname="helv",
+                    fontname="japan",
                     text_color=(0, 0, 0.7),
                     fill_color=(1, 1, 1),
                     align=0,
                 )
                 a2.update()
+                set_annot_border_color(doc, a2, (0.7, 0.7, 1), width=0.5)
                 occupied.append(pymupdf.Rect(jp_rect))
 
             results.append((True, row_idx, item_no, pi))
@@ -257,11 +296,6 @@ def process_pdf(doc, page_annotations):
 # ── ページ抽出（不要ページ削除方式）─────────────────
 
 def extract_annotated_pages(output_dir, annotated_pages_map):
-    """アノテーション付きPDFをコピーし、不要ページを削除して抽出PDFを生成。
-    コメントページ±1ページを残し、それ以外を削除する。
-    ファイル名: {stem}_抽出.pdf
-    既に存在する場合はスキップ。
-    """
     extract_count = 0
     skip_count = 0
 
@@ -291,7 +325,6 @@ def extract_annotated_pages(output_dir, annotated_pages_map):
         doc = pymupdf.open(src_path)
         total_pages = len(doc)
 
-        # 残すページ: コメントページ ± 1
         keep_set = set()
         for p in commented_pages:
             for offset in (-1, 0, 1):
@@ -299,7 +332,6 @@ def extract_annotated_pages(output_dir, annotated_pages_map):
                 if 0 <= candidate < total_pages:
                     keep_set.add(candidate)
 
-        # 削除するページ（後ろから削除）
         delete_pages = sorted(
             [p for p in range(total_pages) if p not in keep_set],
             reverse=True
@@ -308,7 +340,6 @@ def extract_annotated_pages(output_dir, annotated_pages_map):
         for p in delete_pages:
             doc.delete_page(p)
 
-        # 別パスに保存してからリネーム
         doc.save(tmp_path, garbage=4, deflate=True)
         doc.close()
         shutil.move(tmp_path, extract_path)
@@ -328,7 +359,6 @@ def extract_annotated_pages(output_dir, annotated_pages_map):
 # ── サマリレポート ───────────────────────────────────
 
 def print_summary_report(row_results):
-    """Excel行（要件）単位のサマリレポート。"""
     print()
     print("=" * 76)
     print("  サマリレポート（Excel要件単位）")
@@ -431,7 +461,6 @@ def main():
     task_stems = set(tasks.keys())
     total_annot = sum(len(v) for v in tasks.values())
 
-    # ── 既存ファイルチェック ──
     stems_need_annotate = set()
     stems_already_done = set()
     for stem in task_stems:
@@ -442,9 +471,10 @@ def main():
             stems_need_annotate.add(stem)
 
     print(f"""============================================================
-  pdf_annotate_v13.6 - FreeText方式（全て編集可能）
+  pdf_annotate_v13.9 - FreeText方式（全て編集可能）
   項番重複排除あり / 日本語訳は常に出力
   + コメント箇所±1ページ抽出（不要ページ削除方式）
+  + pymupdf 1.25+ 対応（border_color を xref_set_key で設定）
 ============================================================
   Excel: {os.path.basename(args.excel)}
   対象: {len(task_stems)} ファイル / {total_annot} 件
@@ -467,7 +497,6 @@ def main():
         pdf_path = os.path.join(args.input_dir, f"{stem}.pdf")
         out_path = os.path.join(args.output_dir, f"{stem}.pdf")
 
-        # ── 既存チェック ──
         if stem in stems_already_done:
             skip_annot_count += 1
             try:
@@ -584,37 +613,78 @@ def main():
                 original_row_results[row_idx].append((fb_stem, pi, "fb"))
                 annotated_pages_map[fb_stem].add(pi)
                 ok_count += 1
-        fb_doc.save(fb_out)
+        fb_tmp = fb_out + ".tmp"
+        fb_doc.save(fb_tmp)
         fb_doc.close()
+        shutil.move(fb_tmp, fb_out)
 
     # ── 重複排除でスキップされた行に結果をコピー ──
+    dedup_done = set()
     for skipped_row, orig_row, stem, en_text in dedup_links:
+        dedup_id = (skipped_row, stem, norm(en_text))
+        if dedup_id in dedup_done:
+            continue
+        dedup_done.add(dedup_id)
         if skipped_row in row_results:
             for s, p, st in original_row_results.get(orig_row, []):
-                if s == stem:
+                if s == stem and (s, p, "dedup") not in row_results[skipped_row]["marks"]:
                     row_results[skipped_row]["marks"].append((s, p, "dedup"))
+                    break
 
-    # ── 未処理PDFをコピー ──
+    # ── 未参照PDF削除（pdf_annotatedから） ──
+    referenced_stems = task_stems | set(fb_tasks.keys())
+    del_count = 0
+    for pdf_file in sorted(Path(args.output_dir).glob("*.pdf")):
+        stem = pdf_file.stem
+        if stem.endswith("_抽出"):
+            base_stem = stem[:-3]
+            if base_stem not in referenced_stems:
+                pdf_file.unlink()
+                del_count += 1
+                print(f"    削除: {pdf_file.name}")
+        elif stem not in referenced_stems:
+            pdf_file.unlink()
+            del_count += 1
+            print(f"    削除: {pdf_file.name}")
     copy_count = 0
-    for stem in sorted(all_stems - task_stems - set(fb_tasks.keys())):
-        src = os.path.join(args.input_dir, f"{stem}.pdf")
-        dst = os.path.join(args.output_dir, f"{stem}.pdf")
-        if os.path.exists(src) and not os.path.exists(dst):
-            shutil.copy2(src, dst)
-            copy_count += 1
 
     # ── サマリー ──
     print(f"""
 ============================================================
   完了! ✓{ok_count} ⚠FB:{fallback_count} ✗{fail_count}
-  PDF: {done_count}新規処理 + {skip_annot_count}スキップ + {copy_count}コピー
+  PDF: {done_count}新規処理 + {skip_annot_count}スキップ + {del_count}件削除
   出力先: {args.output_dir}
 ============================================================""")
 
-    # ── サマリレポート ──
     print_summary_report(row_results)
 
-    # ── コメント箇所±1ページ抽出 ──
+    # ── 索引Excel出力（J列） ──
+    print()
+    print("── 索引Excel出力 ──")
+    try:
+        from openpyxl import load_workbook as _lwb
+        wb2 = _lwb(args.excel)
+        ws2 = wb2.active
+        idx_count = 0
+        for row_idx, info in row_results.items():
+            marks = info.get("marks", [])
+            index_entries = []
+            for s_stem, p, st in marks:
+                if p is not None and p >= 0 and st in ("ok", "fb", "dedup"):
+                    entry = f"{s_stem}-P{p+1:03d}"
+                    if entry not in index_entries:
+                        index_entries.append(entry)
+            if index_entries:
+                ws2.cell(row=row_idx, column=10, value=", ".join(index_entries))
+                idx_count += 1
+        out_stem = Path(args.excel).stem
+        idx_excel = os.path.join(args.output_dir, f"{out_stem}_indexed.xlsx")
+        wb2.save(idx_excel)
+        print(f"  {idx_count}行にJ列索引を書き込み -> {idx_excel}")
+    except Exception as e:
+        print(f"  索引Excel出力エラー: {e}")
+
+
     extract_count, extract_skip = extract_annotated_pages(
         args.output_dir, dict(annotated_pages_map))
 
@@ -629,4 +699,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
