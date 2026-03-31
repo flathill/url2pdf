@@ -47,7 +47,7 @@
 | B | 中分類 | 参照しない |
 | C | 項番 | 参照しない |
 | D | 要件内容 | 参照しない |
-| E | 判定 | 参照しない |
+| E | 回答 | 参照しない |
 | **F** | **証跡URL** | **読み取り（URLを抽出）** |
 | **G** | **英語証跡テキスト** | **読み書き（URLをファイル名に置換）** |
 | **H** | **日本語訳** | **読み書き（URLをファイル名に置換）** |
@@ -70,7 +70,7 @@ https://helpcenter.veeam.com/docs/backup/vsphere/overview.html
   → VEM001
 
 https://example.com/docs/security-policy
-  → HRV001（DEFAULTグループ）
+  → GEN001（DEFAULTグループ）
 ```
 
 既出のURLが別の行で再び現れた場合、同じファイル名が再利用されます。これにより、1つのURLに対してPDFは1つだけ生成されます。
@@ -83,14 +83,14 @@ URLに含まれるキーワードでプレフィックスが決まります。`-
 --rules "zabbix=ZBX,veeam=VEM,grafana=GRF"
 ```
 
-どのルールにもマッチしないURLは `--default-prefix` で指定したDEFAULTグループに振り分けられます（デフォルト: `HRV`）。
+どのルールにもマッチしないURLは `--default-prefix` で指定したDEFAULTグループに振り分けられます（デフォルト: `GEN`）。
 
 各プレフィックスは独立した通し番号カウンタを持ちます。
 
 ```
 ZBX001, ZBX002, ZBX003, ...
 VEM001, VEM002, VEM003, ...
-HRV001, HRV002, HRV003, ...   ← DEFAULTグループ
+GEN001, GEN002, GEN003, ...   ← DEFAULTグループ
 ```
 
 ### 3. Excel書き換え（パス2）
@@ -216,8 +216,8 @@ python assign_filenames.py input.xlsx \
 |---|---|---|
 | `excel` (必須) | – | 入力Excelファイル |
 | `-o, --output` | 自動生成 | 出力Excelファイルのパス |
-| `--rules` | `zabbix=ZBX,veeam=VEM` | URL→プレフィックスの判別ルール |
-| `--default-prefix` | `HRV` | どのルールにもマッチしないURLのプレフィックス |
+| `--rules` | `zabbix=ZBX,veeam=VEM,harvester=HRV,microsoft=MSO,kasten=VEM,kubevirt=HRV,oracle=ORA` | URL→プレフィックスの判別ルール |
+| `--default-prefix` | `GEN` | どのルールにもマッチしないURLのプレフィックス |
 | `--start` | `1` | 各プレフィックスの通し番号開始値 |
 | `--digits` | `3` | 通し番号の桁数 |
 | `--url-col` | `F` | URL列 |
@@ -236,18 +236,18 @@ python assign_filenames.py input.xlsx \
   ルール:
     URL に 'zabbix' を含む → ZBXxxx
     URL に 'veeam' を含む → VEMxxx
-    マッチなし（DEFAULT） → HRVxxx
+    マッチなし（DEFAULT） → GENxxx
   開始番号: 1  桁数: 3
 ============================================================
 
   URL検出: 83 件（ユニーク）
-    HRV (DEFAULT): 25 件
+    GEN (DEFAULT): 25 件
     VEM: 35 件
     ZBX: 23 件
 
-  ┌─ HRVグループ (DEFAULT) (25件)
-  │  HRV001  ←  https://example.com/docs/security-policy
-  │  HRV002  ←  https://example.com/docs/access-control
+  ┌─ GENグループ (DEFAULT) (25件)
+  │  GEN001  ←  https://example.com/docs/security-policy
+  │  GEN002  ←  https://example.com/docs/access-control
   │  ...
   └─
 
@@ -265,7 +265,7 @@ python assign_filenames.py input.xlsx \
 
   処理完了:
     URL（ユニーク）: 83 件
-      HRV (DEFAULT): 25 件
+      GEN (DEFAULT): 25 件
       VEM: 35 件
       ZBX: 23 件
     I列更新: 72 行

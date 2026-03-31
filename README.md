@@ -77,6 +77,7 @@
 ├── pdf_annotate.py          ← PDF注釈・抽出スクリプト（ステップ5）
 ├── pdf_annotate.py.md       ← pdf_annotate.py の詳細ドキュメント
 ├── restore_urls.py          ← ファイル名→URL復元スクリプト（assign_filenames.pyの逆操作）
+├── restore_urls.py.md       ← restore_urls.py の詳細ドキュメント
 └── samples/                 ← サンプルファイル
     ├── sample.md            ← サンプルの説明・設計意図
     ├── sample_step1.csv     ← ステップ1完了時点のExcel
@@ -201,5 +202,5 @@ __pycache__/
 | [`assign_filenames.py.md`](assign_filenames.py.md) | ファイル名割当スクリプトの詳細説明 |
 | [`url2pdf.py.md`](url2pdf.py.md) | PDF変換スクリプトの詳細説明 |
 | [`pdf_annotate.py.md`](pdf_annotate.py.md) | アノテーションスクリプトの詳細説明 |
-| `restore_urls.py` | ファイル名→URL復元スクリプト（ソース内docstring参照） |
+| [`restore_urls.py.md`](restore_urls.py.md) | ファイル名→URL復元スクリプトの詳細説明 |
 | [`samples/sample.md`](samples/sample.md) | サンプルファイルの説明・設計意図 |
