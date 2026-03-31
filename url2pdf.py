@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""url2pdf_excel_v5.py - Excel(A-J列)からURLを読み取り、証跡PDFを保存する"""
+"""url2pdf.py - Excel(A-J列)からURLを読み取り、証跡PDFを保存する"""
 
 import argparse, re, sys, os, time, datetime
 from pathlib import Path
@@ -16,7 +16,13 @@ def extract_urls(cell_value):
         r'https?://[^\s\u3000-\u9fff\uff00-\uffef（）「」【】、。\n\u200b]+',
         str(cell_value)
     )
-    return [u.rstrip('.,;)') for u in urls if u]
+    def _smart_rstrip(u):
+        while u and u[-1] in '.,;':
+            u = u[:-1]
+        while u.endswith(')') and u.count(')') > u.count('('):
+            u = u[:-1]
+        return u
+    return [_smart_rstrip(u) for u in urls if u]
 
 def parse_filenames(j_value):
     """J列のセル値をファイル名リストに変換"""
@@ -331,7 +337,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("  url2pdf_excel_v5 - 証跡PDF生成ツール (新Excel構造対応)")
+    print("  url2pdf - 証跡PDF生成ツール (新Excel構造対応)")
     print("=" * 60)
     print(f"  Excel       : {args.excel}")
     print(f"  出力先      : {args.output_dir}")

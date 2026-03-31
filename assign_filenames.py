@@ -19,8 +19,8 @@ from openpyxl import load_workbook
 
 
 # ── デフォルトのURL→プレフィックス判別ルール ──────────
-DEFAULT_RULES = "zabbix=ZBX,veeam=VEM"
-DEFAULT_PREFIX = "HRV"
+DEFAULT_RULES = "zabbix=ZBX,veeam=VEM,harvester=HRV,microsoft=MSO,kasten=VEM,kubevirt=HRV,oracle=ORA"
+DEFAULT_PREFIX = "GEN"
 
 
 def parse_rules(rules_str):
@@ -54,15 +54,41 @@ def normalize_url(url):
     return url
 
 
+# ── 修正: 括弧を含むURLを正しく抽出する関数 ──────────
 def extract_urls_from_cell(cell_value):
-    """F列のセル値からURLを抽出"""
+    """F列のセル値からURLを抽出（括弧を含むURLに対応）"""
     if not cell_value:
         return []
-    urls = re.findall(
-        r'https?://[^\s\u3000-\u9fff\uff00-\uffef（）「」【】、。\n\u200b]+',
-        str(cell_value)
-    )
-    return [u.rstrip('.,;)') for u in urls if u]
+    text = str(cell_value)
+    urls = []
+    # URLの開始位置を探して、括弧のバランスを考慮しながら終端を決定
+    for m in re.finditer(r'https?://', text):
+        start = m.start()
+        i = m.end()
+        paren_depth = 0
+        while i < len(text):
+            ch = text[i]
+            # URL終端となる文字（空白、日本語、改行、制御文字）
+            if ch in ' \t\n\r\u200b' or '\u3000' <= ch <= '\u9fff' or '\uff00' <= ch <= '\uffef':
+                break
+            if ch in '（）「」【】、。':
+                break
+            # 括弧のバランスを追跡
+            if ch == '(':
+                paren_depth += 1
+            elif ch == ')':
+                if paren_depth > 0:
+                    paren_depth -= 1
+                else:
+                    # 対応する開き括弧がない → URL外の閉じ括弧と判断
+                    break
+            i += 1
+        url = text[start:i]
+        # 末尾の句読点のみ除去（括弧は除去しない）
+        url = url.rstrip('.,;')
+        if url:
+            urls.append(url)
+    return urls
 
 
 def replace_urls_in_evidence(cell_value, url_to_filename):
@@ -76,6 +102,7 @@ def replace_urls_in_evidence(cell_value, url_to_filename):
         inner = m.group(1)
         if '|' not in inner:
             return m.group(0)
+        # ── 修正: 最初の | で分割（URL内に | が含まれるケースは稀） ──
         left, right = inner.split('|', 1)
         left_stripped = left.strip()
         if left_stripped.startswith('http://') or left_stripped.startswith('https://'):
@@ -84,7 +111,11 @@ def replace_urls_in_evidence(cell_value, url_to_filename):
                 return f"[{url_to_filename[norm]}|{right}]"
         return m.group(0)
 
-    return re.sub(r'\[([^]]+)\]', replacer, text)
+    # ── 修正: ネストした括弧に対応する正規表現 ──
+    # [URL(xxx)|テキスト] のようなパターンを正しくマッチさせる
+    # (?:[^\[\]]|\[(?:[^\[\]])*\])* では不十分なので、
+    # ] の直前まで貪欲にマッチさせつつ、最も外側の [...] を捕捉
+    return re.sub(r'\[((?:[^\[\]]|\([^)]*\))*)\]', replacer, text)
 
 
 def generate_output_path(input_path):
